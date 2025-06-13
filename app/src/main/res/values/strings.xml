@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">FeedFlow</string>
+    <string name="add_channel">RSS URL</string>
+    <string name="add">添加</string>
+    <string name="cancel">取消</string>
+    <string name="tab_title">订阅源</string>
+    <string name="faileAdd">无效的RSS源</string>
+
+</resources>
