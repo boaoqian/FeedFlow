@@ -23,6 +23,23 @@ data class RssChannel(
     @PrimaryKey val name: String,
     val url: String
 )
+@Entity(tableName = "apikey")
+data class ApiKey(
+    @PrimaryKey val key: String = "",
+)
+
+@Dao
+interface ApiKeyDao {
+    @Query("SELECT * FROM apikey LIMIT 1")
+    suspend fun getApiKey(): ApiKey?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertApiKey(apiKey: ApiKey)
+
+    @Query("DELETE FROM apikey")
+    suspend fun deleteApiKey()
+}
+
 
 // 2. DAO
 @Dao
@@ -67,10 +84,11 @@ interface RssChannelDao {
 
 
 // 3. Database
-@Database(entities = [RssItem::class, RssChannel::class], version = 1)
+@Database(entities = [RssItem::class, RssChannel::class, ApiKey::class], version = 1)
 abstract class RssDatabase : RoomDatabase() {
     abstract fun rssItemDao(): RssItemDao
     abstract fun rssChannelDao(): RssChannelDao
+    abstract fun apiKeyDao(): ApiKeyDao
 }
 
 // 4. Singleton Manager
@@ -94,6 +112,11 @@ object RssDatabaseManager {
 
     private fun getChannelDao(): RssChannelDao {
         return db?.rssChannelDao()
+            ?: throw IllegalStateException("Database not initialized. Call initDb() first.")
+    }
+
+    private fun getApiKeyDao(): ApiKeyDao {
+        return db?.apiKeyDao()
             ?: throw IllegalStateException("Database not initialized. Call initDb() first.")
     }
 
@@ -133,4 +156,18 @@ object RssDatabaseManager {
         getChannelDao().deleteChannel(name)
         getRssDao().clearChannel(name)
     }
+
+    suspend fun getApiKey(): String? = withContext(Dispatchers.IO) {
+        getApiKeyDao().getApiKey()?.key
+    }
+
+    suspend fun saveApiKey(key: String) = withContext(Dispatchers.IO) {
+        val apiKey = ApiKey(key = key)
+        getApiKeyDao().insertApiKey(apiKey)
+    }
+
+    suspend fun deleteApiKey() = withContext(Dispatchers.IO) {
+        getApiKeyDao().deleteApiKey()
+    }
+
 }

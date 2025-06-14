@@ -86,6 +86,7 @@ fun Tab(modifier: Modifier = Modifier,
     ) { innerPadding ->
         Column{
             if (showAdd){
+                showDelete = false
                 AddChannelBar(rssUrl = uistate.value.newChannel,
                     onUrlChange = {viewModel.updateNewChannel(it)},
                     onSubmit = {viewModel.submitNewChannel()},

@@ -56,7 +56,10 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -68,15 +71,17 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 @Composable
 fun RssAPP(viewModel:RssViewModel = viewModel(), modifier: Modifier = Modifier) {
     val uistate = viewModel.uiState.collectAsState()
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val coroutineScope = rememberCoroutineScope()
+    val sheetState1 = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState2 = rememberModalBottomSheetState()
+    var selectAITab by remember { mutableStateOf(false) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()){}
     val context = LocalContext.current
     Scaffold(
         modifier = modifier,
         // 右下角浮动按钮
         floatingActionButton = {
-            FloatingActionButton(onClick = {viewModel.selectTab()},
+            FloatingActionButton(onClick = {selectAITab = true
+                                           viewModel.resetAI()},
                 containerColor = MaterialTheme.colorScheme.secondary) {
                 Icon(painterResource(R.drawable.ai_tool), contentDescription = "ai",
                     modifier = Modifier.size(30.dp))
@@ -90,7 +95,7 @@ fun RssAPP(viewModel:RssViewModel = viewModel(), modifier: Modifier = Modifier) 
                     Text(
                         modifier = modifier,
                         text = "FeedFlow",
-                        style = MaterialTheme.typography.headlineMedium,
+                        style = MaterialTheme.typography.titleLarge,
                     )
                 },
                 navigationIcon = {
@@ -130,10 +135,20 @@ fun RssAPP(viewModel:RssViewModel = viewModel(), modifier: Modifier = Modifier) 
                 // 点击外部或返回时隐藏底部抽屉
                 viewModel.selectTab()
             },
-            sheetState = sheetState,
+            sheetState = sheetState1,
 
         ) {
             Tab(viewModel = viewModel)
+        }
+    } else if (selectAITab) {
+        ModalBottomSheet(
+            onDismissRequest = {
+                // 点击外部或返回时隐藏底部抽屉
+                selectAITab = false
+            },
+            sheetState = sheetState2,
+            ) {
+            AITab(viewModel)
         }
     }
 }
@@ -226,7 +241,7 @@ fun DetailedCard(
             Text(
                 modifier = Modifier.clickable { onTitleClick(item.link) },
                 text = item.title,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.bodyLarge,
             )
 
             // Optional description
@@ -235,7 +250,7 @@ fun DetailedCard(
                 Text(
                     modifier = Modifier.clickable { onDescriptionClick() },
                     text = Html.fromHtml(it, Html.FROM_HTML_MODE_COMPACT).toString().trim(),
-                    style = MaterialTheme.typography.bodySmall
+                    style = MaterialTheme.typography.bodyMedium
                 )
             }
 
@@ -315,7 +330,7 @@ fun NewsCard(
             Text(
                 modifier = Modifier.clickable { onTitleClick(item.link) },
                 text = item.title,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.bodyLarge,
             )
 
             item.description.let {
@@ -323,7 +338,7 @@ fun NewsCard(
                 Text(
                     modifier = Modifier.clickable { onDescriptionClick(item.id) },
                     text = Html.fromHtml(it, Html.FROM_HTML_MODE_COMPACT).toString().trim(),
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )

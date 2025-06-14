@@ -1,9 +1,11 @@
 package com.qba.feedflow.data
 
+import android.text.Html
+import com.qba.feedflow.R
 import android.util.Log
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.room.Database
 import com.qba.feedflow.data.RssDatabaseManager.loadData
 import com.qba.feedflow.network.fetchAndParseRss
 import java.text.SimpleDateFormat
@@ -16,11 +18,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import com.qba.feedflow.data.RssDatabaseManager.addChannel
+import com.qba.feedflow.data.RssDatabaseManager.getApiKey
 import com.qba.feedflow.data.RssDatabaseManager.getChannels
 import com.qba.feedflow.data.RssDatabaseManager.likeItem
 import com.qba.feedflow.data.RssDatabaseManager.loadLikedItems
 import com.qba.feedflow.data.RssDatabaseManager.unlikeItem
 import com.qba.feedflow.data.RssDatabaseManager.updateDB
+import com.qba.feedflow.network.DashScopeAPI
 import com.qba.feedflow.data.RssDatabaseManager.deleteChannel as deleteChannel_db
 import com.qba.feedflow.network.ProxyData
 import com.qba.feedflow.network.buildClient
@@ -36,6 +40,14 @@ import java.util.*
 val ALL_CHANNELS = "全部文章"
 val Liked_ITEMS = "收藏"
 
+enum class AITool{
+    TRANS,SUMMARY
+}
+
+enum class AIstep{
+    none,wait,end
+}
+
 data class uiState(
     val nowItems: List<RssItem> = emptyList(),
     val selectedChannel: String = ALL_CHANNELS,
@@ -43,7 +55,10 @@ data class uiState(
     val selectedTab: Boolean = false,
     val newChannel: String = "",
     val channels: List<RssChannel> = emptyList(),
-    val addChannelFailed: Boolean = false
+    val addChannelFailed: Boolean = false,
+    val keyinput: String = "",
+    val ai_step: AIstep = AIstep.none,
+    val ai_res: String = ""
 )
 
 class RssViewModel: ViewModel() {
@@ -51,7 +66,7 @@ class RssViewModel: ViewModel() {
     val uiState: StateFlow<uiState> = _uiState.asStateFlow()
     private var client: OkHttpClient
     private var count: Int=30
-
+    private var api = DashScopeAPI()
     init {
         val p = getSystemProxy()
         if (p != null) {
@@ -66,8 +81,19 @@ class RssViewModel: ViewModel() {
         _uiState.update{currentState -> currentState.copy(newChannel = channel, addChannelFailed = false) }
     }
 
+    fun updateNewKey(key: String){
+        _uiState.update { currentState -> currentState.copy(keyinput = key) }
+    }
+
+    fun saveKey(){
+        api.setKey(uiState.value.keyinput)
+        viewModelScope.launch {
+            RssDatabaseManager.saveApiKey(uiState.value.keyinput)
+        }
+    }
+
     fun read(id: Long){
-        //todo
+        //de
     }
 
     fun like(id: Long,rev: Boolean = false){
@@ -193,6 +219,79 @@ class RssViewModel: ViewModel() {
         loadItems(count)
     }
 
+    suspend fun chatAI(type: AITool) {
+        if (!api.haveKey()){
+            _uiState.update { state->state.copy(ai_res = "请先设置阿里百炼平台apiKey",
+                ai_step = AIstep.end) }
+            return
+        }
+        try {
+            _uiState.update { state->state.copy(ai_step = AIstep.wait) }
+            if(type == AITool.SUMMARY){
+                val prompt = SUM_PROMPT+_uiState.value.nowItems
+                    .filter { "今天" in dateToString(it.pubDate)}.take(10)
+                    .joinToString("\n") { "标题:${it.title} 内容:${Html.fromHtml(it.description, Html.FROM_HTML_MODE_COMPACT).toString().trim()}" }
+                val reply = api.chat(prompt)
+                _uiState.update { state->state.copy(ai_res = reply, ai_step = AIstep.end) }
+            }else if(type == AITool.TRANS){
+                val prompt = TRANS_PROMPT+_uiState.value.nowItems
+                    .filter {it.id == uiState.value.selectedItem}.joinToString("\n") { "标题:${it.title} 内容:${Html.fromHtml(it.description, Html.FROM_HTML_MODE_COMPACT).toString().trim()}" }
+                val reply = api.chat(prompt)
+                _uiState.update { state->state.copy(ai_res = reply, ai_step = AIstep.end) }
+            }
+        }catch (e: Exception){
+            _uiState.update { state->state.copy(ai_res = e.toString(), ai_step = AIstep.end) }
+        }
+
+    }
+
+    private fun onDelta(delta: String){
+        _uiState.update { it.copy(ai_res = it.ai_res+delta) }
+    }
+
+    private fun onComplete(){
+        _uiState.update { it.copy(ai_step = AIstep.end) }
+    }
+
+    private fun onError(e: Throwable){
+        _uiState.update { it.copy(ai_res = e.toString(), ai_step = AIstep.end) }
+    }
+
+    suspend fun chatAIStream(type: AITool){
+        if (!api.haveKey()){
+            _uiState.update { state->state.copy(ai_res = "请先设置阿里百炼平台apiKey",
+                ai_step = AIstep.end) }
+            return
+        }
+        try {
+            _uiState.update { state->state.copy(ai_step = AIstep.wait) }
+            if(type == AITool.SUMMARY){
+                val prompt = SUM_PROMPT+_uiState.value.nowItems
+                    .filter { "今天" in dateToString(it.pubDate)}.take(10)
+                    .joinToString("\n") { "标题:${it.title} 内容:${Html.fromHtml(it.description, Html.FROM_HTML_MODE_COMPACT).toString().trim()}" }
+                api.chatStream(
+                    userMessage = prompt,
+                    onDelta = ::onDelta,
+                    onComplete = ::onComplete,
+                    onError = ::onError
+                )
+
+            }else if(type == AITool.TRANS){
+                val prompt = TRANS_PROMPT+_uiState.value.nowItems
+                    .filter {it.id == uiState.value.selectedItem}.joinToString("\n") { "标题:${it.title} 内容:${Html.fromHtml(it.description, Html.FROM_HTML_MODE_COMPACT).toString().trim()}" }
+                api.chatStream(
+                    userMessage = prompt,
+                    onDelta = ::onDelta,
+                    onComplete = ::onComplete,
+                    onError = ::onError
+                )
+
+            }
+        }catch (e: Exception){
+            _uiState.update { state->state.copy(ai_res = e.toString(), ai_step = AIstep.end) }
+        }
+    }
+
     fun initData(){
         loadItems()
         viewModelScope.launch {
@@ -201,6 +300,7 @@ class RssViewModel: ViewModel() {
             }
             fetchNews()
             loadItems()
+            api.setKey(getApiKey()?:"")
         }
     }
 
@@ -213,6 +313,10 @@ class RssViewModel: ViewModel() {
                 updateDB(items)
             }
         }
+    }
+
+    fun resetAI(){
+        _uiState.update { it.copy(ai_res = "", ai_step = AIstep.none) }
     }
 
     fun selectTab() {
@@ -234,6 +338,7 @@ class RssViewModel: ViewModel() {
 //        0
 //    }
 //}
+
 
 fun stringToLong(dateString: String): Long? {
     // List of common date formatters

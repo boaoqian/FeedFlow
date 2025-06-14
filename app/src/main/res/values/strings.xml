@@ -5,5 +5,11 @@
     <string name="cancel">取消</string>
     <string name="tab_title">订阅源</string>
     <string name="faileAdd">无效的RSS源</string>
-
+    <string name="trans">翻译这篇文章!</string>
+    <string name="summary">今天有啥新鲜事？</string>
+    <string name="ai_hello">你好，有什么可以帮助你的吗？</string>
+    <string name="ai_processing">思考中...</string>
+    <string name="apikey">apiKey\n</string>
+    <string name="set_api_key_first">请先设置阿里百炼平台apiKey</string>
+    <string name="set_api_key">输入阿里百炼平台的apiKey</string>
 </resources>
