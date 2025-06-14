@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
@@ -39,6 +40,7 @@ import com.qba.feedflow.data.dateToString
 import com.qba.feedflow.data.testData
 import com.qba.feedflow.ui.theme.AppTheme
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Create
@@ -52,11 +54,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import com.qba.feedflow.data.RssViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -72,7 +78,8 @@ fun RssAPP(viewModel:RssViewModel = viewModel(), modifier: Modifier = Modifier) 
         floatingActionButton = {
             FloatingActionButton(onClick = {viewModel.selectTab()},
                 containerColor = MaterialTheme.colorScheme.secondary) {
-                Icon(Icons.Default.Create, contentDescription = "ai")
+                Icon(painterResource(R.drawable.ai_tool), contentDescription = "ai",
+                    modifier = Modifier.size(30.dp))
             }
         },
 
@@ -99,7 +106,8 @@ fun RssAPP(viewModel:RssViewModel = viewModel(), modifier: Modifier = Modifier) 
     ) { innerPadding ->
         // 内容区域
         Box(modifier = Modifier.padding(innerPadding)) {
-            NewsList(newsitems = uistate.value.nowItems,
+            NewsList(
+                newsItems = uistate.value.nowItems,
                 selectedItem = uistate.value.selectedItem,
                 onTitleClick = {
                     openWeb(url = it, context = context, launcher = launcher)
@@ -108,9 +116,12 @@ fun RssAPP(viewModel:RssViewModel = viewModel(), modifier: Modifier = Modifier) 
                     viewModel.selectItem(it)
                 },
                 onLikeClick = {
-
+                        id, rev -> viewModel.like(id, rev)
                 },
-                modifier = Modifier.fillMaxSize().padding(dimensionResource(R.dimen.padding_medium)))
+                onBottomReached = {viewModel.getMore()},
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(dimensionResource(R.dimen.padding_medium)))
         }
     }
     if (uistate.value.selectedTab) {
@@ -129,25 +140,54 @@ fun RssAPP(viewModel:RssViewModel = viewModel(), modifier: Modifier = Modifier) 
 
 
 @Composable
-fun NewsList(modifier: Modifier = Modifier, newsitems: List<RssItem>,
-             selectedItem: Long = -1L,
-             onTitleClick: (String) -> Unit,
-             onDescriptionClick: (Long) -> Unit,
-             onLikeClick: () -> Unit) {
-        LazyColumn(modifier = modifier) {
-            items(newsitems) { item ->
-                if (item.id == selectedItem){
-                    DetailedCard(item = item,
-                        onTitleClick = onTitleClick,
-                        onLikeClick = onLikeClick,
-                        onDescriptionClick = {onDescriptionClick(-1L)})
-                }else{
-                    NewsCard(item = item,
-                        onTitleClick = onTitleClick,
-                        onDescriptionClick = onDescriptionClick)
+fun NewsList(
+    modifier: Modifier = Modifier,
+    newsItems: List<RssItem>,
+    selectedItem: Long = -1L,
+    onTitleClick: (String) -> Unit,
+    onDescriptionClick: (Long) -> Unit,
+    onLikeClick: (Long, Boolean) -> Unit,
+    onBottomReached: () -> Unit = {}
+) {
+    val listState = rememberLazyListState()
+
+    // Detect when scrolled to bottom
+    LaunchedEffect(listState, newsItems.size) {
+        snapshotFlow {
+            val layoutInfo = listState.layoutInfo
+            val totalItemsCount = layoutInfo.totalItemsCount
+            val lastVisibleItemIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            lastVisibleItemIndex >= totalItemsCount - 2 && totalItemsCount >= 20
+        }
+            .distinctUntilChanged() // Prevent duplicate emissions
+            .collect { isAtBottom ->
+                if (isAtBottom) {
+                    onBottomReached()
                 }
             }
+    }
+
+    LazyColumn(
+        modifier = modifier,
+        state = listState
+    ) {
+        items(newsItems, key = { item -> item.id }) { item ->
+            if (item.id == selectedItem) {
+                DetailedCard(
+                    item = item,
+                    onTitleClick = onTitleClick,
+                    onLikeClick = onLikeClick,
+                    onDescriptionClick = { onDescriptionClick(-1L) }
+                )
+            } else {
+                NewsCard(
+                    item = item,
+                    onTitleClick = onTitleClick,
+                    onDescriptionClick = onDescriptionClick
+                )
+            }
         }
+    }
 }
 
 @Composable
@@ -155,7 +195,7 @@ fun DetailedCard(
     modifier: Modifier = Modifier,
     item: RssItem,
     onTitleClick: (String) -> Unit = {},
-    onLikeClick: () -> Unit = {},
+    onLikeClick: (Long, Boolean) -> Unit,
     onDescriptionClick: () -> Unit
 ) {
     val context = LocalContext.current
@@ -212,9 +252,10 @@ fun DetailedCard(
             }
             Row (){
                 Spacer(Modifier.weight(1f))
-                IconButton(onClick = onLikeClick,
+                IconButton(onClick = {
+                    onLikeClick(item.id, item.is_like)},
                     ) {
-                    Icon(Icons.Filled.Favorite, contentDescription = "Like")
+                    Icon(Icons.Filled.Favorite, contentDescription = "Like", tint = if (item.is_like) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 IconButton(onClick = {
                     val sendIntent = Intent().apply {
@@ -323,9 +364,10 @@ fun NewsCardPreview() {
                 "huggingface",
                 "ScreenSuite - The Most Comprehensive Evaluation Suite for GUI Agents!",
                 "h",
-                "Over the past few weeks, we’ve been working tirelessly on making GUI agents more open, accessible and easy to integrate. Along the way, we created the largest benchmarking suite for GUI agents performances "
+                "Over the past few weeks, we’ve been working tirelessly on making GUI agents more open, accessible and easy to integrate. Along the way, we created the largest benchmarking suite for GUI agents performances ",
+                is_like = true
             )
-            , onLikeClick = {},
+            , onLikeClick = { i,c: Boolean -> },
             onTitleClick = {},
             onDescriptionClick = {}
         )

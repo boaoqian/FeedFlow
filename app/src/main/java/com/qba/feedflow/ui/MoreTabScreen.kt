@@ -14,6 +14,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -29,6 +30,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.dimensionResource
@@ -37,6 +39,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.qba.feedflow.R
+import com.qba.feedflow.data.ALL_CHANNELS
+import com.qba.feedflow.data.Liked_ITEMS
 import com.qba.feedflow.data.RssViewModel
 import com.qba.feedflow.data.testchannel
 import com.qba.feedflow.data.uiState
@@ -47,6 +51,7 @@ import com.qba.feedflow.ui.theme.AppTheme
 fun Tab(modifier: Modifier = Modifier,
         viewModel:RssViewModel = viewModel()) {
     var showAdd by remember { mutableStateOf(false) }
+    var showDelete by remember { mutableStateOf(false) }
     val uistate = viewModel.uiState.collectAsState()
     Scaffold(
         topBar = {
@@ -67,6 +72,14 @@ fun Tab(modifier: Modifier = Modifier,
                             contentDescription = "添加订阅源"
                         )
                     }
+                    IconButton(onClick = {
+                        showDelete = !showDelete
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "删除订阅源"
+                        )
+                    }
                 }
             )
         }
@@ -84,7 +97,11 @@ fun Tab(modifier: Modifier = Modifier,
             }
             ChannelList(
                 channelList = uistate.value.channels.map { it -> it.name },
-                modifier = Modifier.padding(innerPadding)
+                modifier = Modifier.padding(innerPadding),
+                onChannelClick = {viewModel.selectChannel(it)},
+                onChannelDelete = {viewModel.deleteChannel(it)},
+                showDelete = showDelete,
+                selectedChannel = uistate.value.selectedChannel
             )
         }
     }
@@ -93,13 +110,41 @@ fun Tab(modifier: Modifier = Modifier,
 @Composable
 fun ChannelList(channelList: List<String> = emptyList(),
                 onChannelClick: (String) -> Unit = {},
-                modifier: Modifier = Modifier) {
+                onChannelDelete: (String) -> Unit = {},
+                modifier: Modifier = Modifier,
+                showDelete: Boolean = false,
+                selectedChannel: String = ALL_CHANNELS) {
     LazyColumn(modifier = modifier.padding(dimensionResource(R.dimen.padding_medium))) {
         item {
-            ChannelEntry("全部文章", Main = true)
+            if(selectedChannel == ALL_CHANNELS)
+                ChannelEntry(ALL_CHANNELS,  selected = true, onChannelClick = onChannelClick)
+            else
+                ChannelEntry(ALL_CHANNELS,  selected = false, onChannelClick = onChannelClick)
+        }
+        item {
+            if(selectedChannel == Liked_ITEMS)
+                ChannelEntry(Liked_ITEMS,  selected = true,
+                    onChannelDelete = onChannelDelete,
+                    onChannelClick = onChannelClick)
+            else
+                ChannelEntry(Liked_ITEMS,  selected = false,
+                    onChannelDelete = onChannelDelete,
+                    onChannelClick = onChannelClick)
         }
         items(channelList) { item ->
-            ChannelEntry(item,onChannelClick=onChannelClick)
+            if(item == selectedChannel){
+                ChannelEntry(item,
+                    onChannelClick=onChannelClick,
+                    onChannelDelete = onChannelDelete,
+                    showDelete = showDelete,
+                    selected = true)
+            }else{
+                ChannelEntry(item,
+                    onChannelClick=onChannelClick,
+                    onChannelDelete = onChannelDelete,
+                    showDelete = showDelete)
+            }
+
         }
     }
 }
@@ -108,8 +153,10 @@ fun ChannelList(channelList: List<String> = emptyList(),
 fun ChannelEntry(
     channel: String,
     modifier: Modifier = Modifier,
-    Main: Boolean = false,
-    onChannelClick: (String) -> Unit = {}
+    onChannelClick: (String) -> Unit = {},
+    onChannelDelete: (String) -> Unit = {},
+    showDelete: Boolean = false,
+    selected: Boolean = false
 ) {
     Box(
         modifier = modifier
@@ -117,12 +164,25 @@ fun ChannelEntry(
             .background(MaterialTheme.colorScheme.background)
             .padding(all = dimensionResource(R.dimen.padding_small))
     ) {
-        Text(
-            text = channel,
-            style = if (Main) MaterialTheme.typography.headlineLarge else MaterialTheme.typography.headlineMedium,
-            color = if (Main) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
-            modifier = Modifier.clickable {onChannelClick(channel)}
-        )
+        Row(modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = channel,
+                style = if (selected) MaterialTheme.typography.headlineLarge else MaterialTheme.typography.headlineMedium,
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.clickable {onChannelClick(channel)}
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            if (showDelete){
+                IconButton(onClick = {onChannelDelete(channel)}){
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "删除订阅源: " + channel
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -183,5 +243,13 @@ fun AddChannelBarPreview() {
     AppTheme(darkTheme = false) {
         AddChannelBar(rssUrl = "", onUrlChange = {},
             onSubmit = {}, onCancel = {})
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun AddList() {
+    AppTheme(darkTheme = false) {
+        ChannelList(testchannel, showDelete = true)
     }
 }

@@ -15,7 +15,8 @@ data class RssItem(
     val link: String,
     val description: String,
     val pubDate: Long = 0,
-    val read: Boolean = false
+    val read: Boolean = false,
+    val is_like: Boolean = false
 )
 @Entity(tableName = "rss_channels")
 data class RssChannel(
@@ -29,6 +30,9 @@ interface RssItemDao {
     @Query("UPDATE rss_items SET read = 1 WHERE id = :id")
     suspend fun markAsRead(id: Long)
 
+    @Query("SELECT * FROM rss_items WHERE is_like = 1 ORDER BY pubDate DESC")
+    suspend fun loadLikedItems(): List<RssItem>
+
     @Query("SELECT * FROM rss_items ORDER BY pubDate DESC LIMIT :limit")
     suspend fun getRecentItems(limit: Int): List<RssItem>
 
@@ -37,6 +41,16 @@ interface RssItemDao {
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertItems(items: List<RssItem>)
+
+    @Query("DELETE FROM rss_items WHERE channel = :channel")
+    suspend fun clearChannel(channel: String)
+
+    @Query("UPDATE rss_items SET is_like = 1 WHERE id = :id")
+    suspend fun likeItem(id: Long)
+
+    @Query("UPDATE rss_items SET is_like = 0 WHERE id = :id")
+    suspend fun unlikeItem(id: Long)
+
 }
 
 @Dao
@@ -87,6 +101,18 @@ object RssDatabaseManager {
         getRssDao().getRecentItems(i)
     }
 
+    suspend fun likeItem(id: Long) = withContext(Dispatchers.IO) {
+        getRssDao().likeItem(id)
+    }
+
+    suspend fun unlikeItem(id: Long) = withContext(Dispatchers.IO) {
+        getRssDao().unlikeItem(id)
+    }
+
+    suspend fun loadLikedItems(): List<RssItem> = withContext(Dispatchers.IO) {
+        getRssDao().loadLikedItems()
+    }
+
     suspend fun loadData(i: Int, channel: String): List<RssItem> = withContext(Dispatchers.IO) {
         getRssDao().getRecentItemsByChannel(i, channel)
     }
@@ -101,5 +127,10 @@ object RssDatabaseManager {
     }
     suspend fun getChannels(): List<RssChannel> = withContext(Dispatchers.IO) {
         getChannelDao().getAllChannels()
+    }
+
+    suspend fun deleteChannel(name: String) = withContext(Dispatchers.IO) {
+        getChannelDao().deleteChannel(name)
+        getRssDao().clearChannel(name)
     }
 }

@@ -77,8 +77,8 @@ suspend fun fetchAndParseRss(
                 makeRssItem(
                     title = element.getElementsByTagName("title").item(0)?.textContent ?: "",
                     link = element.getElementsByTagName("link").item(0)?.attributes?.getNamedItem("href")?.nodeValue ?: "",
-                    description = element.getElementsByTagName("summary")?.item(0)?.textContent
-                        ?: element.getElementsByTagName("content")?.item(0)?.textContent
+                    description = element.getElementsByTagName("content")?.item(0)?.textContent
+                        ?: element.getElementsByTagName("summary")?.item(0)?.textContent
                         ?: "",
                     pubDate = element.getElementsByTagName("updated")?.item(0)?.textContent,
                     channel = channelTitle
