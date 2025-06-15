@@ -123,8 +123,10 @@ fun AITab(viewModel: RssViewModel = viewModel(),modifier: Modifier = Modifier){
                 Setting(modifier = Modifier.padding(dimensionResource(R.dimen.padding_medium))
                     ,key = uistate.value.keyinput,
                     onChange = {viewModel.updateNewKey(it)},
-                    onSubmit = {viewModel.saveKey()},
-                    onCancel = {setting = false})
+                    onSubmit = {viewModel.saveKey()
+                        viewModel.resetAI()},
+                    onCancel = {setting = false
+                    viewModel.resetAI()})
             }
             Spacer(Modifier.weight(0.8f))
         }

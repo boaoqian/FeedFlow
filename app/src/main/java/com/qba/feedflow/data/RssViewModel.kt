@@ -266,15 +266,28 @@ class RssViewModel: ViewModel() {
         try {
             _uiState.update { state->state.copy(ai_step = AIstep.wait) }
             if(type == AITool.SUMMARY){
-                val prompt = SUM_PROMPT+_uiState.value.nowItems
-                    .filter { "今天" in dateToString(it.pubDate)}.take(10)
-                    .joinToString("\n") { "标题:${it.title} 内容:${Html.fromHtml(it.description, Html.FROM_HTML_MODE_COMPACT).toString().trim()}" }
-                api.chatStream(
-                    userMessage = prompt,
-                    onDelta = ::onDelta,
-                    onComplete = ::onComplete,
-                    onError = ::onError
-                )
+                if (_uiState.value.nowItems.count { "今天" in dateToString(it.pubDate) } >= 3){
+                    val prompt = SUM_PROMPT+_uiState.value.nowItems
+                        .filter { "今天" in dateToString(it.pubDate)}.take(10)
+                        .joinToString("\n") { "标题:${it.title} 内容:${Html.fromHtml(it.description, Html.FROM_HTML_MODE_COMPACT).toString().trim()}" }
+
+                    api.chatStream(
+                        userMessage = prompt,
+                        onDelta = ::onDelta,
+                        onComplete = ::onComplete,
+                        onError = ::onError
+                    )
+                }else{
+                    val prompt = SUM_PROMPT+_uiState.value.nowItems.take(5)
+                        .joinToString("\n") { "标题:${it.title} 内容:${Html.fromHtml(it.description, Html.FROM_HTML_MODE_COMPACT).toString().trim()}" }
+
+                    api.chatStream(
+                        userMessage = prompt,
+                        onDelta = ::onDelta,
+                        onComplete = ::onComplete,
+                        onError = ::onError)
+                }
+
 
             }else if(type == AITool.TRANS){
                 val prompt = TRANS_PROMPT+_uiState.value.nowItems
